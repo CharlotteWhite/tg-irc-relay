@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-
 '''A Python module that allows you to connect to IRC in a simple way.'''
 
 import errno
@@ -120,8 +119,8 @@ class IRCConnection:
         self.acquire_lock()
         try:
             if not self.sock:
-                e = socket.error(
-                    '[errno %d] Socket operation on non-socket' % errno.ENOTSOCK)
+                e = socket.error('[errno %d] Socket operation on non-socket' %
+                                 errno.ENOTSOCK)
                 e.errno = errno.ENOTSOCK
                 raise e
             try:
@@ -156,8 +155,9 @@ class IRCConnection:
             ident = self.nick
         if realname == None:
             realname = ident
-        self.quote('USER %s %s %s :%s' % (rmnlsp(ident), rmnlsp(
-            ident), rmnlsp(self.addr[0]), rmnl(realname)), sendnow=sendnow)
+        self.quote('USER %s %s %s :%s' % (rmnlsp(ident), rmnlsp(ident),
+                                          rmnlsp(self.addr[0]), rmnl(realname)),
+                   sendnow=sendnow)
 
     def join(self, channel, key=None, sendnow=True):
         '''Join channel. A password is optional.'''
@@ -165,8 +165,8 @@ class IRCConnection:
             key = ' ' + key
         else:
             key = ''
-        self.quote('JOIN %s%s' %
-                   (catchannel(channel), rmnl(key)), sendnow=sendnow)
+        self.quote('JOIN %s%s' % (catchannel(channel), rmnl(key)),
+                   sendnow=sendnow)
 
     def part(self, channel, reason=None, sendnow=True):
         '''Leave channel. A reason is optional.'''
@@ -174,8 +174,8 @@ class IRCConnection:
             reason = ' :' + reason
         else:
             reason = ''
-        self.quote('PART %s%s' %
-                   (catchannel(channel), rmnl(reason)), sendnow=sendnow)
+        self.quote('PART %s%s' % (catchannel(channel), rmnl(reason)),
+                   sendnow=sendnow)
 
     def quit(self, reason=None, wait=True):
         '''Quit and disconnect from server. A reason is optional. If wait is True, the send buffer will be flushed.'''
@@ -229,8 +229,8 @@ class IRCConnection:
                 newmode = ' :' + newmode
         else:
             newmode = ''
-        self.quote('MODE %s%s' %
-                   (rmnlsp(target), rmnl(newmode)), sendnow=sendnow)
+        self.quote('MODE %s%s' % (rmnlsp(target), rmnl(newmode)),
+                   sendnow=sendnow)
 
     def kick(self, channel, target, reason=None, sendnow=True):
         '''Kick a person out of the channel.'''
@@ -238,8 +238,9 @@ class IRCConnection:
             reason = ' :' + reason
         else:
             reason = ''
-        self.quote('KICK %s %s%s' % (
-            rmnlsp(channel), rmnlsp(target), rmnl(reason)), sendnow=sendnow)
+        self.quote('KICK %s %s%s' % (rmnlsp(channel), rmnlsp(target),
+                                     rmnl(reason)),
+                   sendnow=sendnow)
 
     def away(self, state=None, sendnow=True):
         '''Set away status with an argument, or cancal away status without the argument'''
@@ -251,8 +252,8 @@ class IRCConnection:
 
     def invite(self, target, channel, sendnow=True):
         '''Invite a specific user to an invite-only channel.'''
-        self.quote('INVITE %s %s' %
-                   (rmnlsp(target), rmnlsp(channel)), sendnow=sendnow)
+        self.quote('INVITE %s %s' % (rmnlsp(target), rmnlsp(channel)),
+                   sendnow=sendnow)
 
     def notice(self, dest, msg=None, sendnow=True):
         '''Send a notice to a specific user.'''
@@ -273,16 +274,16 @@ class IRCConnection:
             newtopic = ' :' + newtopic
         else:
             newtopic = ''
-        self.quote('TOPIC %s%s' %
-                   (rmnlsp(channel), rmnl(newtopic)), sendnow=sendnow)
+        self.quote('TOPIC %s%s' % (rmnlsp(channel), rmnl(newtopic)),
+                   sendnow=sendnow)
 
     def recv(self, block=True):
         '''Receive stream from server.\nDo not call it directly, it should be called by parse() or recvline().'''
         if self.recvlock.acquire():
             try:
                 if not self.sock:
-                    e = socket.error(
-                        '[errno %d] Socket operation on non-socket' % errno.ENOTSOCK)
+                    e = socket.error('[errno %d] Socket operation on non-socket'
+                                     % errno.ENOTSOCK)
                     e.errno = errno.ENOTSOCK
                     raise e
                 try:
@@ -296,8 +297,8 @@ class IRCConnection:
                             if isinstance(self.sock, ssl.SSLSocket):
                                 received = self.sock.recv(self.buffer_length)
                             else:
-                                received = self.sock.recv(
-                                    self.buffer_length, socket.MSG_DONTWAIT)
+                                received = self.sock.recv(self.buffer_length,
+                                                          socket.MSG_DONTWAIT)
                         except ssl.SSLWantReadError:
                             select.select([self.sock], [], [])
                             received = self.sock.recv(self.buffer_length)
@@ -360,7 +361,11 @@ class IRCConnection:
                     try:
                         self.quote('PONG %s' % line[5:], sendnow=True)
                     finally:
-                        return {'nick': None, 'ident': None, 'cmd': 'PING', 'dest': None, 'msg': stripcomma(line[5:])}
+                        return {'nick': None,
+                                'ident': None,
+                                'cmd': 'PING',
+                                'dest': None,
+                                'msg': stripcomma(line[5:])}
                 if line.startswith(':'):
                     cmd = line.split(' ', 1)
                     nick = cmd.pop(0).split('!', 1)
@@ -409,12 +414,21 @@ class IRCConnection:
                 else:
                     msg = dest = cmd = None
                 try:
-                    if nick and cmd == 'PRIVMSG' and msg and tostr(msg).startswith('\x01PING '):
+                    if nick and cmd == 'PRIVMSG' and msg and tostr(
+                            msg).startswith('\x01PING '):
                         self.notice(tostr(nick), tostr(msg), sendnow=True)
                 finally:
-                    return {'nick': nick, 'ident': ident, 'cmd': cmd, 'dest': dest, 'msg': msg}
+                    return {'nick': nick,
+                            'ident': ident,
+                            'cmd': cmd,
+                            'dest': dest,
+                            'msg': msg}
             except:
-                return {'nick': None, 'ident': None, 'cmd': None, 'dest': None, 'msg': line}
+                return {'nick': None,
+                        'ident': None,
+                        'cmd': None,
+                        'dest': None,
+                        'msg': line}
         else:
             return None
 

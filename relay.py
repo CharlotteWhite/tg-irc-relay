@@ -34,12 +34,22 @@ import requests
 
 __version__ = '1.2'
 
-MEDIA_TYPES = frozenset(('audio', 'document', 'photo', 'sticker', 'video', 'voice', 'contact', 'location', 'new_chat_participant', 'left_chat_participant', 'new_chat_title', 'new_chat_photo', 'delete_chat_photo', 'group_chat_created'))
-EXT_MEDIA_TYPES = frozenset(('audio', 'document', 'photo', 'sticker', 'video', 'voice', 'contact', 'location', 'new_chat_participant', 'left_chat_participant', 'new_chat_title', 'new_chat_photo', 'delete_chat_photo', 'group_chat_created', '_ircuser'))
+MEDIA_TYPES = frozenset(('audio', 'document', 'photo', 'sticker', 'video',
+                         'voice', 'contact', 'location', 'new_chat_participant',
+                         'left_chat_participant', 'new_chat_title',
+                         'new_chat_photo', 'delete_chat_photo',
+                         'group_chat_created'))
+EXT_MEDIA_TYPES = frozenset(
+    ('audio', 'document', 'photo', 'sticker', 'video', 'voice', 'contact',
+     'location', 'new_chat_participant', 'left_chat_participant',
+     'new_chat_title', 'new_chat_photo', 'delete_chat_photo',
+     'group_chat_created', '_ircuser'))
 
 loglevel = logging.DEBUG if sys.argv[-1] == '-d' else logging.INFO
 
-logging.basicConfig(stream=sys.stdout, format='# %(asctime)s [%(levelname)s] %(message)s', level=loglevel)
+logging.basicConfig(stream=sys.stdout,
+                    format='# %(asctime)s [%(levelname)s] %(message)s',
+                    level=loglevel)
 
 socket.setdefaulttimeout(60)
 
@@ -49,6 +59,7 @@ HSession.headers["User-Agent"] = USERAGENT
 
 re_ircaction = re.compile('^\x01ACTION (.*)\x01$')
 re_ircforward = re.compile(r'^\[([^]]+)\] (.*)$|^\*\* ([^ ]+) (.*) \*\*$')
+
 
 class LRUCache:
 
@@ -77,21 +88,28 @@ class LRUCache:
                 self.cache.popitem(last=False)
         self.cache[key] = value
 
+
 def async_func(func):
+
     @functools.wraps(func)
     def wrapped(*args, **kwargs):
+
         def func_noerr(*args, **kwargs):
             try:
                 func(*args, **kwargs)
             except Exception:
                 logging.exception('Async function failed.')
+
         executor.submit(func_noerr, *args, **kwargs)
+
     return wrapped
+
 
 def _raise_ex(ex):
     raise ex
 
 ### Polling
+
 
 def getupdates():
     global CFG, MSG_Q
@@ -108,11 +126,13 @@ def getupdates():
                 MSG_Q.put(upd)
         time.sleep(.2)
 
+
 def checkircconn():
     global ircconn
     if not ircconn or not ircconn.sock:
         ircconn = libirc.IRCConnection()
-        ircconn.connect((CFG['ircserver'], CFG['ircport']), use_ssl=CFG['ircssl'])
+        ircconn.connect((CFG['ircserver'], CFG['ircport']),
+                        use_ssl=CFG['ircssl'])
         if CFG.get('ircpass'):
             ircconn.setpass(CFG['ircpass'])
         ircconn.setnick(CFG['ircnick'])
@@ -120,24 +140,30 @@ def checkircconn():
         ircconn.join(CFG['ircchannel'])
         logging.info('IRC (re)connected.')
 
+
 def getircupd():
     global MSG_Q
     while 1:
         checkircconn()
         line = ircconn.parse(block=False)
         if line and line["cmd"] == "PRIVMSG":
-            if line["dest"] != CFG['ircnick'] and not re.match(CFG['ircignore'], line["nick"]):
+            if line["dest"] != CFG['ircnick'] and not re.match(CFG['ircignore'],
+                                                               line["nick"]):
                 updateid = -int(time.time())
                 msg = {
                     'message_id': updateid,
-                    'from': {'id': CFG['ircbotid'], 'first_name': CFG['ircbotname'], 'username': 'orzirc_bot'},
+                    'from': {'id': CFG['ircbotid'],
+                             'first_name': CFG['ircbotname'],
+                             'username': 'orzirc_bot'},
                     'date': int(time.time()),
-                    'chat': {'id': -CFG['groupid'], 'title': CFG['ircchannel']},
+                    'chat': {'id': -CFG['groupid'],
+                             'title': CFG['ircchannel']},
                     'text': line["msg"].strip(),
                     '_ircuser': line["nick"]
                 }
                 MSG_Q.put({'update_id': updateid, 'message': msg})
         time.sleep(.5)
+
 
 def ircconn_say(dest, msg, sendnow=True):
     MIN_INT = 0.2
@@ -149,7 +175,10 @@ def ircconn_say(dest, msg, sendnow=True):
         time.sleep(MIN_INT - delta)
     ircconn.say(dest, msg, sendnow)
     ircconn_say.lasttime = time.time()
+
+
 ircconn_say.lasttime = 0
+
 
 def irc_send(text='', reply_to_message_id=None):
     if ircconn:
@@ -172,6 +201,7 @@ def irc_send(text='', reply_to_message_id=None):
         else:
             text = lines[0] + ' [...] ' + lines[-1]
         ircconn_say(CFG['ircchannel'], text)
+
 
 @async_func
 def irc_forward(msg):
@@ -201,27 +231,34 @@ def irc_forward(msg):
             elif 'reply_to_message' in msg:
                 replname = ''
                 replyu = msg['reply_to_message']['from']
+                replymsg = re.sub('\[.*?\]',
+                                  '',
+                                  msg['reply_to_message'].get('text', ''),
+                                  count=1)
                 if replyu['id'] in (CFG['botid'], CFG['ircbotid']):
-                    rnmatch = re_ircforward.match(msg['reply_to_message'].get('text', ''))
+                    rnmatch = re_ircforward.match(msg['reply_to_message'].get(
+                        'text', ''))
                     if rnmatch:
                         replname = rnmatch.group(1) or rnmatch.group(3)
                 replname = replname or smartname(replyu)
-                text = "%s: %s" % (replname, text)
+                text = "%s (Re: %s): %s" % (replname, text, replymsg[:10])
             # ignore blank lines
             text = list(filter(lambda s: s.strip(), text.splitlines()))
             if len(text) > 3:
                 text = text[:3]
                 text[-1] += ' [...]'
             for ln in text[:3]:
-                ircconn_say(CFG['ircchannel'], '[%s] %s' % (smartname(msg['from']), ln))
+                ircconn_say(CFG['ircchannel'],
+                            '[%s] %s' % (smartname(msg['from']), ln))
     except Exception:
         logging.exception('Forward a message to IRC failed.')
 
-
 ### API Related
+
 
 class BotAPIFailed(Exception):
     pass
+
 
 def change_session():
     global HSession
@@ -229,6 +266,7 @@ def change_session():
     HSession = requests.Session()
     HSession.headers["User-Agent"] = USERAGENT
     logging.warning('Session changed.')
+
 
 def bot_api(method, **params):
     for att in range(3):
@@ -239,7 +277,7 @@ def bot_api(method, **params):
             break
         except Exception as ex:
             if att < 1:
-                time.sleep((att+1) * 2)
+                time.sleep((att + 1) * 2)
                 change_session()
             else:
                 raise ex
@@ -247,16 +285,19 @@ def bot_api(method, **params):
         raise BotAPIFailed(repr(ret))
     return ret['result']
 
+
 def bot_api_noerr(method, **params):
     try:
         bot_api(method, **params)
     except Exception:
         logging.exception('Async bot API failed.')
 
+
 def sync_sendmsg(text, chat_id, reply_to_message_id=None):
     text = text.strip()
     if not text:
-        logging.warning('Empty message ignored: %s, %s' % (chat_id, reply_to_message_id))
+        logging.warning('Empty message ignored: %s, %s' %
+                        (chat_id, reply_to_message_id))
         return
     logging.info('sendMessage(%s): %s' % (len(text), text[:20]))
     if len(text) > 2000:
@@ -264,7 +305,10 @@ def sync_sendmsg(text, chat_id, reply_to_message_id=None):
     reply_id = reply_to_message_id
     if reply_to_message_id and reply_to_message_id < 0:
         reply_id = None
-    m = bot_api('sendMessage', chat_id=chat_id, text=text, reply_to_message_id=reply_id)
+    m = bot_api('sendMessage',
+                chat_id=chat_id,
+                text=text,
+                reply_to_message_id=reply_id)
     if chat_id == -CFG['groupid']:
         MSG_CACHE[m['message_id']] = m
         # IRC messages
@@ -272,16 +316,20 @@ def sync_sendmsg(text, chat_id, reply_to_message_id=None):
             irc_send(text, reply_to_message_id)
     return m
 
+
 sendmsg = async_func(sync_sendmsg)
+
 
 @async_func
 def typing(chat_id):
     logging.info('sendChatAction: %r' % chat_id)
     bot_api('sendChatAction', chat_id=chat_id, action='typing')
 
+
 def getfile(file_id):
     logging.info('getFile: %r' % file_id)
     return bot_api('getFile', file_id=file_id)
+
 
 def retrieve(url, filename, raisestatus=True):
     # NOTE the stream=True parameter
@@ -290,10 +338,11 @@ def retrieve(url, filename, raisestatus=True):
         r.raise_for_status()
     with open(filename, 'wb') as f:
         for chunk in r.iter_content(chunk_size=1024):
-            if chunk: # filter out keep-alive new chunks
+            if chunk:  # filter out keep-alive new chunks
                 f.write(chunk)
         f.flush()
     return r.status_code
+
 
 def classify(msg):
     '''
@@ -341,6 +390,7 @@ def classify(msg):
     else:
         return -1
 
+
 def command(text, chatid, replyid, msg):
     try:
         t = text.strip().split(' ')
@@ -354,16 +404,18 @@ def command(text, chatid, replyid, msg):
                     logging.info('Command: /%s %s' % (cmd, expr[:20]))
                     COMMANDS[cmd](expr, chatid, replyid, msg)
             elif chatid > 0:
-                sendmsg('Invalid command. Send /help for help.', chatid, replyid)
+                sendmsg('Invalid command. Send /help for help.', chatid,
+                        replyid)
         # 233333
         #elif all(n.isdigit() for n in t):
-            #COMMANDS['m'](' '.join(t), chatid, replyid, msg)
+        #COMMANDS['m'](' '.join(t), chatid, replyid, msg)
         elif chatid > 0:
             t = ' '.join(t).strip()
             logging.info('Reply: ' + t[:20])
             COMMANDS['reply'](t, chatid, replyid, msg)
     except Exception:
         logging.exception('Excute command failed.')
+
 
 def processmsg():
     d = MSG_Q.get()
@@ -384,27 +436,34 @@ def processmsg():
             rid = msg['message_id']
             if CFG.get('i2t') and '_ircuser' in msg:
                 if CFG.get('shownick'):
-                    rid = sync_sendmsg('[%s] %s' % (msg['_ircuser'], msg['text']), msg['chat']['id'])['message_id']
+                    rid = sync_sendmsg('[%s] %s' %
+                                       (msg['_ircuser'], msg['text']),
+                                       msg['chat']['id'])['message_id']
                 else:
-                    rid = sync_sendmsg('%s' % msg['text'], msg['chat']['id'])['message_id']
+                    rid = sync_sendmsg('%s' % msg['text'],
+                                       msg['chat']['id'])['message_id']
             command(msg['text'], msg['chat']['id'], rid, msg)
         elif cls == 2:
             if CFG.get('i2t'):
                 act = re_ircaction.match(msg['text'])
                 if act:
-                    sendmsg('** %s %s **' % (msg['_ircuser'], act.group(1)), msg['chat']['id'])
+                    sendmsg('** %s %s **' % (msg['_ircuser'], act.group(1)),
+                            msg['chat']['id'])
                 elif CFG.get('shownick'):
-                    sendmsg('[%s] %s' % (msg['_ircuser'], msg['text']), msg['chat']['id'])
+                    sendmsg('[%s] %s' % (msg['_ircuser'], msg['text']),
+                            msg['chat']['id'])
                 else:
                     sendmsg('%s' % msg['text'], msg['chat']['id'])
         elif cls == -1:
             sendmsg('Wrong usage', msg['chat']['id'], msg['message_id'])
 
+
 def cachemedia(msg):
     '''
     Download specified media if not exist.
     '''
-    mt = msg.keys() & frozenset(('audio', 'document', 'sticker', 'video', 'voice'))
+    mt = msg.keys() & frozenset(
+        ('audio', 'document', 'sticker', 'video', 'voice'))
     file_ext = ''
     if mt:
         file_id = msg[mt]['file_id']
@@ -431,10 +490,12 @@ def cachemedia(msg):
         pass
     return (cachename, retrieve(URL_FILE + file_path, fpath))
 
+
 def timestring_a(seconds):
     m, s = divmod(seconds, 60)
     h, m = divmod(m, 60)
     return '%d:%02d:%02d' % (h, m, s)
+
 
 def servemedia(msg):
     '''
@@ -451,13 +512,17 @@ def servemedia(msg):
             if servemode == 'self':
                 ret += ' %s%s' % (CFG['serveurl'], fname)
             elif servemode == 'vim-cn':
-                r = requests.post('http://img.vim-cn.com/', files={'name': open(os.path.join(CFG['cachepath'], fname), 'rb')})
+                r = requests.post('http://img.vim-cn.com/',
+                                  files={'name': open(
+                                      os.path.join(CFG['cachepath'], fname),
+                                      'rb')})
                 ret += ' ' + r.text
     elif 'sticker' in msg:
         if msg['sticker'].get('emoji'):
             ret = msg['sticker']['emoji'] + ' ' + ret
     elif 'document' in msg:
-        ret += ' %s type: %s' % (msg['document'].get('file_name', ''), msg['document'].get('mime_type', ''))
+        ret += ' %s type: %s' % (msg['document'].get('file_name', ''),
+                                 msg['document'].get('mime_type', ''))
     elif 'video' in msg:
         ret += ' ' + timestring_a(msg['video'].get('duration', 0))
     elif 'voice' in msg:
@@ -466,11 +531,13 @@ def servemedia(msg):
         ret += ' ' + msg['new_chat_title']
     return ret
 
+
 def smartname(user, limit=20):
-    USER_CACHE[user['id']] = (user.get('username'), user.get('first_name'), user.get('last_name'))
+    USER_CACHE[user['id']] = (user.get('username'), user.get('first_name'),
+                              user.get('last_name'))
     first, last = user.get('first_name', ''), user.get('last_name', '')
     if not first:
-        return '<%s>' % 'Unknown'[:limit-2]
+        return '<%s>' % 'Unknown' [:limit - 2]
     pn = first
     if last:
         pn += ' ' + last
@@ -481,6 +548,7 @@ def smartname(user, limit=20):
             return first[:limit]
     else:
         return pn
+
 
 def cmd_t2i(expr, chatid, replyid, msg):
     '''/t2i [on|off] Toggle Telegram to IRC forwarding.'''
@@ -493,7 +561,9 @@ def cmd_t2i(expr, chatid, replyid, msg):
             CFG['t2i'] = True
             sendmsg('Telegram to IRC forwarding enabled.', chatid, replyid)
     else:
-        sendmsg('Only available in the group ' + CFG['groupname'], chatid, replyid)
+        sendmsg('Only available in the group ' + CFG['groupname'], chatid,
+                replyid)
+
 
 def cmd_i2t(expr, chatid, replyid, msg):
     '''/i2t [on|off] Toggle IRC to Telegram forwarding.'''
@@ -506,11 +576,17 @@ def cmd_i2t(expr, chatid, replyid, msg):
             CFG['i2t'] = True
             sendmsg('IRC to Telegram forwarding enabled.', chatid, replyid)
     else:
-        sendmsg('Only available in the group ' + CFG['groupname'], chatid, replyid)
+        sendmsg('Only available in the group ' + CFG['groupname'], chatid,
+                replyid)
+
 
 def cmd_start(expr, chatid, replyid, msg):
     if chatid != -CFG['groupid']:
-        sendmsg('This is %s. It can forward messages between %s (Telegram group) and %s (IRC channel).\nSend me /help for help.' % (CFG['botname'], CFG['groupname'], CFG['ircchannel']), chatid, replyid)
+        sendmsg(
+            'This is %s. It can forward messages between %s (Telegram group) and %s (IRC channel).\nSend me /help for help.'
+            % (CFG['botname'], CFG['groupname'], CFG['ircchannel']), chatid,
+            replyid)
+
 
 def cmd_help(expr, chatid, replyid, msg):
     '''/help Show usage.'''
@@ -526,15 +602,15 @@ def cmd_help(expr, chatid, replyid, msg):
     elif chatid == -CFG['groupid']:
         sendmsg('Full help disabled in this group.', chatid, replyid)
     elif chatid > 0:
-        sendmsg('This is %s. It can forward messages between %s (Telegram group) and %s (IRC channel).\n' % (CFG['botname'], CFG['groupname'], CFG['ircchannel']) + '\n'.join(cmd.__doc__ for cmd in COMMANDS.values() if cmd.__doc__), chatid, replyid)
+        sendmsg(
+            'This is %s. It can forward messages between %s (Telegram group) and %s (IRC channel).\n'
+            % (CFG['botname'], CFG['groupname'], CFG['ircchannel']
+              ) + '\n'.join(cmd.__doc__ for cmd in COMMANDS.values()
+                            if cmd.__doc__), chatid, replyid)
 
 # should document usage in docstrings
-COMMANDS = collections.OrderedDict((
-('start', cmd_start),
-('t2i', cmd_t2i),
-('i2t', cmd_i2t),
-('help', cmd_help)
-))
+COMMANDS = collections.OrderedDict((('start', cmd_start), ('t2i', cmd_t2i),
+                                    ('i2t', cmd_i2t), ('help', cmd_help)))
 
 USER_CACHE = LRUCache(20)
 MSG_CACHE = LRUCache(10)
