@@ -512,10 +512,12 @@ def servemedia(msg):
             if servemode == 'self':
                 ret += ' %s%s' % (CFG['serveurl'], fname)
             elif servemode == 'vim-cn':
+                file_path = os.path.join(CFG['cachepath'], fname)
                 r = requests.post('http://img.vim-cn.com/',
-                                  files={'name': open(
-                                      os.path.join(CFG['cachepath'], fname),
+                                  files={'name': open(file_path
                                       'rb')})
+                # Delete file afterwards, as photo is already uploaded.
+                os.remove(file_path)
                 ret += ' ' + r.text
     elif 'sticker' in msg:
         if msg['sticker'].get('emoji'):
