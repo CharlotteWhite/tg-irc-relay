@@ -514,8 +514,7 @@ def servemedia(msg):
             elif servemode == 'vim-cn':
                 file_path = os.path.join(CFG['cachepath'], fname)
                 r = requests.post('http://img.vim-cn.com/',
-                                  files={'name': open(file_path
-                                      'rb')})
+                                  files={'name': open(file_path, 'rb')})
                 # Delete file afterwards, as photo is already uploaded.
                 os.remove(file_path)
                 ret += ' ' + r.text
