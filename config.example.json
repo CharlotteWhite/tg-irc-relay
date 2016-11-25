@@ -15,5 +15,6 @@
     "ircssl": true,
     "offset": 0,
     "t2i": true,
-    "token": "123456789:AABBCCDDEEFFGGHHIIJJKKLL_mmnnooppqq"
+    "token": "123456789:AABBCCDDEEFFGGHHIIJJKKLL_mmnnooppqq",
+    "tg_admin_list": "@tgadmin1 @tgadmin2 @tgadmin3"
 }

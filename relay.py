@@ -608,9 +608,18 @@ def cmd_help(expr, chatid, replyid, msg):
               ) + '\n'.join(cmd.__doc__ for cmd in COMMANDS.values()
                             if cmd.__doc__), chatid, replyid)
 
+
+def cmd_calladmin(expr, chatid, replyid, msg):
+    '''/admin Mentions admin on both Telegram and IRC.'''
+    if chatid == -CFG['groupid']:
+        sendmsg('!admin %s, %s requests your attention.' %
+                (CFG.get('tg_admin_list', '*Insert admins in config*'),
+                 smartname(msg['from'])), chatid, replyid)
+
 # should document usage in docstrings
 COMMANDS = collections.OrderedDict((('start', cmd_start), ('t2i', cmd_t2i),
-                                    ('i2t', cmd_i2t), ('help', cmd_help)))
+                                    ('i2t', cmd_i2t), ('help', cmd_help),
+                                    ('admin', cmd_calladmin)))
 
 USER_CACHE = LRUCache(20)
 MSG_CACHE = LRUCache(10)
