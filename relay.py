@@ -241,7 +241,7 @@ def irc_forward(msg):
                     if rnmatch:
                         replname = rnmatch.group(1) or rnmatch.group(3)
                 replname = replname or smartname(replyu)
-                text = "%s (Re: %s): %s" % (replname, text, replymsg[:10])
+                text = "%s (Re: %s): %s" % (replname, replymsg[:10], text)
             # ignore blank lines
             text = list(filter(lambda s: s.strip(), text.splitlines()))
             if len(text) > 3:
