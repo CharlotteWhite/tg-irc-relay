@@ -581,7 +581,7 @@ def upload_to_linx(file_path, api_url, limit_bytes=10000000):
         return 'File not found.'
 
     r = requests.put(
-        urllib.parse.urljoin(api_url + '/', os.path.split(file_path)[1]),
+        urllib.parse.urljoin(api_url, os.path.split(file_path)[1]),
         files={'file': open(file_path, 'rb')},
         headers={'Linx-Randomize': 'yes'})
     if r.status_code != 200:
