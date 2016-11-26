@@ -536,7 +536,10 @@ def servemedia(msg):
 def smartname(user, limit=20):
     USER_CACHE[user['id']] = (user.get('username'), user.get('first_name'),
                               user.get('last_name'))
-    first, last = user.get('first_name', ''), user.get('last_name', '')
+    username, first, last = user.get('username', ''), user.get(
+        'first_name', ''), user.get('last_name', '')
+    if username:
+        return username
     if not first:
         return '<%s>' % 'Unknown' [:limit - 2]
     pn = first
