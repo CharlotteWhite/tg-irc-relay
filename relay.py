@@ -513,8 +513,6 @@ def servemedia(msg):
             elif servemode == 'vim-cn':
                 r = requests.post('http://img.vim-cn.com/',
                                   files={'name': open(file_path, 'rb')})
-                # Delete file afterwards, as photo is already uploaded.
-                os.remove(file_path)
                 ret += ' ' + r.text
             elif servemode == 'linx':
                 l_url = upload_to_linx(file_path, CFG.get('linx_api_url'),
@@ -544,6 +542,12 @@ def servemedia(msg):
             ret += ' ' + l_url
     elif 'new_chat_title' in msg:
         ret += ' ' + msg['new_chat_title']
+
+    # Delete file if uploaded online
+    if len(ret) > 0:
+        if servemode == 'vim-cn' or servemode == 'linx':
+            os.remove(file_path)
+
     return ret
 
 
