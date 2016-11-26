@@ -227,7 +227,10 @@ def irc_forward(msg):
                         fwdname = rnmatch.group(1) or rnmatch.group(3)
                         text = rnmatch.group(2) or rnmatch.group(4)
                 fwdname = fwdname or smartname(msg['forward_from'])
-                text = "Fwd %s: %s" % (fwdname, text)
+                if CFG['colorize']:
+                    text = "\x03%sFwd %s:\x0399 %s" % (CFG['mentioncolor'], fwdname, text)
+                else:
+                    text = "Fwd %s: %s" % (fwdname, text)
             elif 'reply_to_message' in msg:
                 replname = ''
                 replyu = msg['reply_to_message']['from']
@@ -241,15 +244,24 @@ def irc_forward(msg):
                     if rnmatch:
                         replname = rnmatch.group(1) or rnmatch.group(3)
                 replname = replname or smartname(replyu)
-                text = "%s (Re: %s): %s" % (replname, replymsg[:10], text)
+                if CFG['colorize']:
+                    text = "\x03%sRe %s\x0399 「\x03%s%s\x0399」: %s" % (CFG['mentioncolor'],
+                        replname, CFG['replytextcolor'], replymsg[:10], text)
+                else:
+                    text = "Re %s 「%s」: %s" % (replname, replymsg[:10], text)
             # ignore blank lines
             text = list(filter(lambda s: s.strip(), text.splitlines()))
             if len(text) > 3:
                 text = text[:3]
                 text[-1] += ' [...]'
+            if CFG['colorize']:
+                nick = '\x03%s%s\x0399' % (CFG['usercolor'], smartname(msg['from']))
+            else:
+                nick = smartname(msg['from'])
+
             for ln in text[:3]:
                 ircconn_say(CFG['ircchannel'],
-                            '[%s] %s' % (smartname(msg['from']), ln))
+                            '[%s] %s' % (nick, ln))
     except Exception:
         logging.exception('Forward a message to IRC failed.')
 
@@ -633,6 +645,10 @@ URL = 'https://api.telegram.org/bot%s/' % CFG['token']
 URL_FILE = 'https://api.telegram.org/file/bot%s/' % CFG['token']
 
 CFG.setdefault('shownick', True)
+CFG.setdefault('colorize', False)
+CFG.setdefault('usercolor', 99)
+CFG.setdefault('mentioncolor', 99)
+CFG.setdefault('replytextcolor', 99)
 
 MSG_Q = queue.Queue()
 executor = concurrent.futures.ThreadPoolExecutor(3)
