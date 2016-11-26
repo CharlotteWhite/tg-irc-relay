@@ -239,7 +239,7 @@ def irc_forward(msg):
                 replname = ''
                 replyu = msg['reply_to_message']['from']
 
-                # 判断消息类型，并装饰一下
+                # Identify message type.
                 if 'photo' in msg['reply_to_message']:
                     replymsg = '<photo>'
                 elif 'sticker' in msg['reply_to_message']:
@@ -470,7 +470,7 @@ def processmsg():
         if cls == 0:
             rid = msg['message_id']
             if CFG.get('i2t') and '_ircuser' in msg:
-                # 我们公平一点，既然Telegram能屏蔽IRC，那么反过来也应当一样
+                # Message ignoring support for IRC side.
                 if (not (CFG['paeeye'] and msg['text'].startswith('//'))):
                     if CFG.get('shownick'):
                         rid = sync_sendmsg('[%s] %s' %
@@ -542,7 +542,7 @@ def servemedia(msg):
     if not keys:
         return ''
 
-    # 不提示入群和退群
+    # Ignore join/quit notifications.
     if 'new_chat_participant' in msg or 'left_chat_participant' in msg:
         return ''
 
