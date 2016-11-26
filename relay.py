@@ -181,10 +181,10 @@ def ircconn_say(dest, msg, sendnow=True):
 ircconn_say.lasttime = 0
 
 
-def irc_send(text='', reply_to_message_id=None):
+def irc_send(text='', reply_to_message_id=None, hide_reply=False):
     if ircconn:
         checkircconn()
-        if reply_to_message_id:
+        if reply_to_message_id and not hide_reply:
             m = MSG_CACHE.get(reply_to_message_id, {})
             logging.debug('Got reply message: ' + str(m))
             if '_ircuser' in m:
@@ -206,6 +206,9 @@ def irc_send(text='', reply_to_message_id=None):
 
 @async_func
 def irc_forward(msg):
+    '''
+    将Telegram消息经过处理，发到IRC处
+    '''
     if not ircconn:
         return
     try:
@@ -219,7 +222,7 @@ def irc_forward(msg):
                 text += ' ' + servemedia(msg)
             else:
                 text = servemedia(msg)
-        if text and not text.startswith('@@@'):
+        if text and not (CFG['paeeye'] and text.startswith('//')):
             if 'forward_from' in msg:
                 fwdname = ''
                 if msg['forward_from']['id'] in (CFG['botid'], CFG['ircbotid']):
@@ -228,29 +231,56 @@ def irc_forward(msg):
                         fwdname = rnmatch.group(1) or rnmatch.group(3)
                         text = rnmatch.group(2) or rnmatch.group(4)
                 fwdname = fwdname or smartname(msg['forward_from'])
-                text = "Fwd %s: %s" % (fwdname, text)
+                if CFG['colorize']:
+                    text = "\x03%sFwd %s:\x0399 %s" % (CFG['mentioncolor'], fwdname, text)
+                else:
+                    text = "Fwd %s: %s" % (fwdname, text)
             elif 'reply_to_message' in msg:
                 replname = ''
                 replyu = msg['reply_to_message']['from']
-                replymsg = re.sub('\[.*?\]',
-                                  '',
-                                  msg['reply_to_message'].get('text', ''),
-                                  count=1)
+
+                # 判断消息类型，并装饰一下
+                if 'photo' in msg['reply_to_message']:
+                    replymsg = '<photo>'
+                elif 'sticker' in msg['reply_to_message']:
+                    replymsg = msg['reply_to_message']['sticker']['emoji'] + '<sticker>'
+                elif 'document' in msg['reply_to_message']:
+                    replymsg = '<document>'
+                elif 'video' in msg['reply_to_message']:
+                    replymsg = '<video>'
+                elif 'voice' in msg['reply_to_message']:
+                    replymsg = '<voice>'
+                else:
+                    replymsg = re.sub('^\[.*?\] ', '',
+                                      msg['reply_to_message'].get('text', ''))
+                    if len(replymsg) > 10:
+                        replymsg = replymsg[:8] + '…'
+                    if len(replymsg) > 0:
+                        replymsg = '「%s」' % replymsg
+
                 if replyu['id'] in (CFG['botid'], CFG['ircbotid']):
                     rnmatch = re_ircforward.match(msg['reply_to_message'].get(
                         'text', ''))
                     if rnmatch:
                         replname = rnmatch.group(1) or rnmatch.group(3)
                 replname = replname or smartname(replyu)
-                text = "%s (Re: %s): %s" % (replname, replymsg[:10], text)
+                if CFG['colorize']:
+                    text = "\x03%sRe %s\x0399 \x03%s%s\x0399: %s" % (CFG['mentioncolor'],
+                        replname, CFG['replytextcolor'], replymsg, text)
+                else:
+                    text = "Re %s %s: %s" % (replname, replymsg, text)
             # ignore blank lines
             text = list(filter(lambda s: s.strip(), text.splitlines()))
             if len(text) > 3:
                 text = text[:3]
                 text[-1] += ' [...]'
+            if CFG['colorize']:
+                nick = '\x03%s%s\x0399' % (CFG['usercolor'], smartname(msg['from']))
+            else:
+                nick = smartname(msg['from'])
+
             for ln in text[:3]:
-                ircconn_say(CFG['ircchannel'],
-                            '[%s] %s' % (smartname(msg['from']), ln))
+                ircconn_say(CFG['ircchannel'], '[%s] %s' % (nick, ln))
     except Exception:
         logging.exception('Forward a message to IRC failed.')
 
@@ -294,13 +324,17 @@ def bot_api_noerr(method, **params):
         logging.exception('Async bot API failed.')
 
 
-def sync_sendmsg(text, chat_id, reply_to_message_id=None):
+def sync_sendmsg(text, chat_id, reply_to_message_id=None, hide_reply=False):
+    '''
+    从IRC向Telegram发送消息
+    '''
     text = text.strip()
     if not text:
         logging.warning('Empty message ignored: %s, %s' %
                         (chat_id, reply_to_message_id))
         return
-    logging.info('sendMessage(%s): %s' % (len(text), text[:20]))
+
+    # logging.info('sendMessage(%s): %s' % (len(text), text[:20]))
     if len(text) > 2000:
         text = text[:1999] + '…'
     reply_id = reply_to_message_id
@@ -314,7 +348,7 @@ def sync_sendmsg(text, chat_id, reply_to_message_id=None):
         MSG_CACHE[m['message_id']] = m
         # IRC messages
         if reply_to_message_id is not None:
-            irc_send(text, reply_to_message_id)
+            irc_send(text, reply_to_message_id, hide_reply)
     return m
 
 
@@ -416,6 +450,9 @@ def command(text, chatid, replyid, msg):
 
 
 def processmsg():
+    '''
+    处理来自IRC那边的消息
+    '''
     d = MSG_Q.get()
     logging.debug('Msg arrived: %r' % d)
     uid = d['update_id']
@@ -433,19 +470,21 @@ def processmsg():
         if cls == 0:
             rid = msg['message_id']
             if CFG.get('i2t') and '_ircuser' in msg:
-                if CFG.get('shownick'):
-                    rid = sync_sendmsg('[%s] %s' %
-                                       (msg['_ircuser'], msg['text']),
-                                       msg['chat']['id'])['message_id']
-                else:
-                    rid = sync_sendmsg('%s' % msg['text'],
-                                       msg['chat']['id'])['message_id']
+                # 我们公平一点，既然Telegram能屏蔽IRC，那么反过来也应当一样
+                if (not (CFG['paeeye'] and msg['text'].startswith('//'))):
+                    if CFG.get('shownick'):
+                        rid = sync_sendmsg('[%s] %s' %
+                                           (msg['_ircuser'], msg['text']),
+                                           msg['chat']['id'])['message_id']
+                    else:
+                        rid = sync_sendmsg('%s' % msg['text'],
+                                           msg['chat']['id'])['message_id']
             command(msg['text'], msg['chat']['id'], rid, msg)
         elif cls == 2:
             if CFG.get('i2t'):
                 act = re_ircaction.match(msg['text'])
                 if act:
-                    sendmsg('** %s %s **' % (msg['_ircuser'], act.group(1)),
+                    sendmsg('** %s: %s **' % (msg['_ircuser'], act.group(1)),
                             msg['chat']['id'])
                 elif CFG.get('shownick'):
                     sendmsg('[%s] %s' % (msg['_ircuser'], msg['text']),
@@ -502,6 +541,11 @@ def servemedia(msg):
     keys = tuple(msg.keys() & MEDIA_TYPES)
     if not keys:
         return ''
+
+    # 不提示入群和退群
+    if 'new_chat_participant' in msg or 'left_chat_participant' in msg:
+        return ''
+
     ret = '<%s>' % keys[0]
     servemode = CFG.get('servemedia')
     fname, code = cachemedia(msg)
@@ -653,12 +697,28 @@ def cmd_calladmin(expr, chatid, replyid, msg):
     if chatid == -CFG['groupid']:
         sendmsg('!admin %s, %s requests your attention.' %
                 (CFG.get('tg_admin_list', '*Insert admins in config*'),
-                 smartname(msg['from'])), chatid, replyid)
+                 smartname(msg['from'])), chatid, replyid, True)
+
+
+def cmd_callseen(expr, chatid, replyid, msg):
+    '''/seen See whether a user is online or not.'''
+    param = re.sub('^/\S* *', '', msg['text'])
+    if chatid == -CFG['groupid'] and len(param) > 0:
+        sendmsg('@seen %s' % param, chatid, replyid, True)
+
+
+def cmd_callcommand(expr, chatid, replyid, msg):
+    '''/command Call a command from IRC'''
+    param = re.sub('^/\S* *', '', msg['text'])
+    if chatid == -CFG['groupid'] and len(param) > 0:
+        sendmsg('%s' % param, chatid, replyid, True)
+
 
 # should document usage in docstrings
 COMMANDS = collections.OrderedDict((('start', cmd_start), ('t2i', cmd_t2i),
                                     ('i2t', cmd_i2t), ('help', cmd_help),
-                                    ('admin', cmd_calladmin)))
+                                    ('admin', cmd_calladmin), ('seen', cmd_callseen),
+                                    ('command', cmd_callcommand)))
 
 USER_CACHE = LRUCache(20)
 MSG_CACHE = LRUCache(10)
@@ -668,6 +728,11 @@ URL = 'https://api.telegram.org/bot%s/' % CFG['token']
 URL_FILE = 'https://api.telegram.org/file/bot%s/' % CFG['token']
 
 CFG.setdefault('shownick', True)
+CFG.setdefault('colorize', False)
+CFG.setdefault('usercolor', 3)
+CFG.setdefault('mentioncolor', 5)
+CFG.setdefault('replytextcolor', 14)
+CFG.setdefault('paeeye', False)
 
 MSG_Q = queue.Queue()
 executor = concurrent.futures.ThreadPoolExecutor(3)
