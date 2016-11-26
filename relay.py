@@ -22,6 +22,7 @@ import sys
 import time
 import json
 import queue
+import urllib
 import socket
 import logging
 import threading
@@ -406,9 +407,6 @@ def command(text, chatid, replyid, msg):
             elif chatid > 0:
                 sendmsg('Invalid command. Send /help for help.', chatid,
                         replyid)
-        # 233333
-        #elif all(n.isdigit() for n in t):
-        #COMMANDS['m'](' '.join(t), chatid, replyid, msg)
         elif chatid > 0:
             t = ' '.join(t).strip()
             logging.info('Reply: ' + t[:20])
@@ -462,13 +460,13 @@ def cachemedia(msg):
     '''
     Download specified media if not exist.
     '''
-    mt = msg.keys() & frozenset(
-        ('audio', 'document', 'sticker', 'video', 'voice'))
+    mt = list(msg.keys() & frozenset(('audio', 'document', 'sticker', 'video',
+                                      'voice')))
     file_ext = ''
     if mt:
-        file_id = msg[mt]['file_id']
-        file_size = msg[mt].get('file_size')
-        if mt == 'sticker':
+        file_id = msg[mt[0]]['file_id']
+        file_size = msg[mt[0]].get('file_size')
+        if mt[0] == 'sticker':
             file_ext = '.webp'
     elif 'photo' in msg:
         photo = max(msg['photo'], key=lambda x: x['width'])
@@ -505,29 +503,45 @@ def servemedia(msg):
     if not keys:
         return ''
     ret = '<%s>' % keys[0]
+    servemode = CFG.get('servemedia')
+    fname, code = cachemedia(msg)
+    file_path = os.path.join(CFG['cachepath'], fname)
     if 'photo' in msg:
-        servemode = CFG.get('servemedia')
         if servemode:
-            fname, code = cachemedia(msg)
             if servemode == 'self':
                 ret += ' %s%s' % (CFG['serveurl'], fname)
             elif servemode == 'vim-cn':
-                file_path = os.path.join(CFG['cachepath'], fname)
                 r = requests.post('http://img.vim-cn.com/',
                                   files={'name': open(file_path, 'rb')})
                 # Delete file afterwards, as photo is already uploaded.
                 os.remove(file_path)
                 ret += ' ' + r.text
+            elif servemode == 'linx':
+                l_url = upload_to_linx(file_path, CFG.get('linx_api_url'),
+                                       CFG.get('linx_size_limit', 10000000))
+                ret += ' ' + l_url
     elif 'sticker' in msg:
         if msg['sticker'].get('emoji'):
             ret = msg['sticker']['emoji'] + ' ' + ret
     elif 'document' in msg:
         ret += ' %s type: %s' % (msg['document'].get('file_name', ''),
                                  msg['document'].get('mime_type', ''))
+        if servemode == 'linx':
+            l_url = upload_to_linx(file_path, CFG.get('linx_api_url'),
+                                   CFG.get('linx_size_limit', 10000000))
+            ret += ' ' + l_url
     elif 'video' in msg:
         ret += ' ' + timestring_a(msg['video'].get('duration', 0))
+        if servemode == 'linx':
+            l_url = upload_to_linx(file_path, CFG.get('linx_api_url'),
+                                   CFG.get('linx_size_limit', 10000000))
+            ret += ' ' + l_url
     elif 'voice' in msg:
         ret += ' ' + timestring_a(msg['voice'].get('duration', 0))
+        if servemode == 'linx':
+            l_url = upload_to_linx(file_path, CFG.get('linx_api_url'),
+                                   CFG.get('linx_size_limit', 10000000))
+            ret += ' ' + l_url
     elif 'new_chat_title' in msg:
         ret += ' ' + msg['new_chat_title']
     return ret
@@ -552,6 +566,23 @@ def smartname(user, limit=20):
             return first[:limit]
     else:
         return pn
+
+
+def upload_to_linx(file_path, api_url, limit_bytes=10000000):
+    try:
+        if os.stat(file_path).st_size > limit_bytes:
+            return 'File larger than {limit}b. Not forwarded.'.format(
+                limit=limit_bytes)
+    except FileNotFoundError:
+        return 'File not found.'
+
+    r = requests.put(
+        urllib.parse.urljoin(api_url + '/', os.path.split(file_path)[1]),
+        files={'file': open(file_path, 'rb')},
+        headers={'Linx-Randomize': 'yes'})
+    if r.status_code != 200:
+        return 'File upload error.'
+    return r.text
 
 
 def cmd_t2i(expr, chatid, replyid, msg):

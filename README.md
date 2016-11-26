@@ -26,9 +26,12 @@ You must disable the privacy mode for your bot.
 * __shownick__: true/false, Enable/disable prefixing of messages sent to Telegram with the IRC nick of the sender (enabled by default)
 * __t2i__: true/false, Enable/disable Telegram to IRC forwarding
 * __token__: Your bot's token
-* __servemedia__ (_Optional_): Can be "" or "self" or "vim-cn".
+* __servemedia__ (_Optional_): Can be "" or "self" or "vim-cn" or "linx".
 * __cachepath__ (When "servemedia" is not empty): Where should the images be stored. **YOU are responsible for clearing this directory.** (eg. set up a cron job of `find $CACHEPATH -type f -mtime +1 -delete`.)
 * __serveurl__ (When "servemedia" is "*self*"): The url prefix where the images can be retreived from your server, which should be an alias of __cachepath__.
+* __linx_api_url__ (When "servemedia" is "*linx*"): API address of self-hosted [linx](https://github.com/andreimarcu/linx-server) instance.
+* __linx_size_limit__ (When "servemedia" is "*linx*"): Maximum size of file to be forwarded. In bytes. 10MB by default.
+* __tg_admin_list__: A string of mentions used to notify administrators with /admin.
 
 ## See also
 
